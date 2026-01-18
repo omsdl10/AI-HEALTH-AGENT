@@ -1,17 +1,17 @@
-##AI Health Agent
-**AI Health Agent** is an AI-powered application that analyzes blood reports and provides personalized, meaningful health insights using a multi-model intelligent agent architecture. 
+##AI Health Agent##
+AI Health Agent is an AI-powered application that analyzes blood reports and provides personalized, meaningful health insights using a multi-model intelligent agent architecture. 
 
 
 
 ## 🌟 Features
 
-- Intelligent agent-based architecture with **multi-model cascade system** for reliable results :contentReference[oaicite:2]{index=2}  
-- **In-context learning** & knowledge build-up from past analyses :contentReference[oaicite:3]{index=3}  
-- **Medical report analysis** with detailed personalized insights :contentReference[oaicite:4]{index=4}  
-- **PDF upload, validation, and text extraction** (up to ~20 MB) :contentReference[oaicite:5]{index=5}  
-- **User authentication & session management** :contentReference[oaicite:6]{index=6}  
-- **Session history tracking** for review of past analyses :contentReference[oaicite:7]{index=7}  
-- Modern UI with real-time feedback and responsiveness :contentReference[oaicite:8]{index=8}
+- Intelligent agent-based architecture with **multi-model cascade system** for reliable results
+- **In-context learning** & knowledge build-up from past analyses 
+- **Medical report analysis** with detailed personalized insights 
+- **PDF upload, validation, and text extraction** (up to ~20 MB) 
+- **User authentication & session management** 
+- **Session history tracking** for review of past analyses   
+- Modern UI with real-time feedback and responsiveness
 
 ---
 
