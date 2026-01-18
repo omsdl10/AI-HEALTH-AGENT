@@ -40,7 +40,7 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/harshhh28/hia.git
+   git clone https://github.com/omsdl10/AI-HEALTH-AGENT.git
    cd AI-health-agent
 Install dependencies
 
