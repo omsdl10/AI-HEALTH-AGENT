@@ -1,27 +1,47 @@
-##AI Health Agent##
-AI Health Agent is an AI-powered application that analyzes blood reports and provides personalized, meaningful health insights using a multi-model intelligent agent architecture. 
+# 🩺 AI Health Agent
 
+**AI Health Agent** is an AI-powered application that analyzes blood test reports and delivers **personalized, meaningful health insights** using a **multi-model intelligent agent architecture**.
+It is designed to provide reliable, explainable results through a cascading LLM system and a modern, user-friendly interface.
 
+---
 
 ## 🌟 Features
 
-- Intelligent agent-based architecture with **multi-model cascade system** for reliable results
-- **In-context learning** & knowledge build-up from past analyses 
-- **Medical report analysis** with detailed personalized insights 
-- **PDF upload, validation, and text extraction** (up to ~20 MB) 
-- **User authentication & session management** 
-- **Session history tracking** for review of past analyses   
-- Modern UI with real-time feedback and responsiveness
+* 🤖 **Intelligent Agent-Based Architecture**
+  Multi-model cascade system for higher reliability and accuracy
+
+* 🧠 **In-Context Learning**
+  Knowledge build-up from past analyses to improve future insights
+
+* 🧾 **Medical Report Analysis**
+  Detailed, personalized interpretation of blood reports
+
+* 📄 **PDF Upload & Processing**
+
+  * Upload PDFs up to ~20 MB
+  * Validation and text extraction using PDFPlumber
+
+* 🔐 **User Authentication & Session Management**
+  Powered by Supabase Auth
+
+* 🕒 **Session History Tracking**
+  Review and revisit previous analyses
+
+* 🎨 **Modern UI**
+  Built with Streamlit, offering real-time feedback and responsiveness
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** Streamlit   
-- **AI Integration:** Multi-model cascade using Groq (LLMs) 
-- **Database:** Supabase  
-- **PDF Extraction:** PDFPlumber
-- **Authentication:** Supabase Auth
+| Layer           | Technology                 |
+| --------------- | -------------------------- |
+| Frontend        | Streamlit                  |
+| AI / LLMs       | Groq (Multi-model cascade) |
+| Database        | Supabase                   |
+| Authentication  | Supabase Auth              |
+| PDF Extraction  | PDFPlumber                 |
+| File Validation | Python-Magic               |
 
 ---
 
@@ -29,40 +49,93 @@ AI Health Agent is an AI-powered application that analyzes blood reports and pro
 
 ### 🧰 Requirements
 
-- Python **3.8+**
-- Streamlit **1.30.0+**
-- Groq API key
-- Supabase account
-- PDFPlumber
-- Python-magic (`python-magic-bin` on Windows or `python-magic` on Linux/Mac)
+* Python **3.8+**
+* Streamlit **1.30.0+**
+* Groq API Key
+* Supabase Account
+* PDFPlumber
+* Python-Magic
 
-### 📝 Steps
+  * **Windows:** `python-magic-bin`
+  * **Linux / macOS:** `python-magic`
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/omsdl10/AI-HEALTH-AGENT.git
-   cd AI-health-agent
-Install dependencies
+---
 
-bash
-Copy code
+### 📝 Setup Steps
+
+#### 1️⃣ Clone the Repository
+
+```bash
+git clone https://github.com/omsdl10/AI-HEALTH-AGENT.git
+cd AI-HEALTH-AGENT
+```
+
+#### 2️⃣ Install Dependencies
+
+```bash
 pip install -r requirements.txt
-Configure environment variables
-Create a file at .streamlit/secrets.toml and add:
+```
 
-toml
-Copy code
+#### 3️⃣ Configure Environment Variables
+
+Create the following file:
+
+```
+.streamlit/secrets.toml
+```
+
+Add your credentials:
+
+```toml
 SUPABASE_URL = "your-supabase-url"
 SUPABASE_KEY = "your-supabase-key"
 GROQ_API_KEY = "your-groq-api-key"
+```
 
-Set up database schema
-Use the SQL script from public/db/script.sql to initialize your Supabase tables. 
-GitHub
+---
 
-Run the app
+#### 4️⃣ Set Up Database Schema
 
-bash
-Copy code
+* Navigate to your Supabase project
+* Open the **SQL Editor**
+* Run the SQL script located at:
+
+```
+public/db/script.sql
+```
+
+This will initialize all required tables.
+
+---
+
+#### 5️⃣ Run the Application
+
+```bash
 streamlit run src/main.py
+```
+
+---
+
+## 📂 Project Structure (Overview)
+
+```
+AI-HEALTH-AGENT/
+│
+├── src/
+│   ├── main.py
+│   ├── agents/
+│   ├── utils/
+│   └── services/
+│
+├── public/
+│   └── db/
+│       └── script.sql
+│
+├── requirements.txt
+├── README.md
+└── .streamlit/
+    └── secrets.toml
+```
+
+##
 
