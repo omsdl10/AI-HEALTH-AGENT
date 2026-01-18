@@ -66,28 +66,3 @@ bash
 Copy code
 streamlit run src/main.py
 
-📁 Project Structure
-AI-health-agent/
-├── requirements.txt
-├── README.md
-├── src/
-│   ├── main.py                 # Application entry point
-│   ├── auth/                   # Authentication related modules
-│   │   ├── auth_service.py     # Supabase auth integration
-│   │   └── session_manager.py  # Session management
-│   ├── components/             # UI Components
-│   │   ├── analysis_form.py    # Report analysis form
-│   │   ├── auth_pages.py       # Login/Signup pages
-│   │   ├── footer.py          # Footer component
-│   │   └── sidebar.py         # Sidebar navigation
-│   ├── config/                # Configuration files
-│   │   ├── app_config.py      # App settings
-│   │   └── prompts.py         # AI prompts
-│   ├── services/              # Service integrations
-│   │   └── ai_service.py      # AI service integration
-│   ├── agents/                # Agent-based architecture components
-│   │   ├── agent_manager.py   # Agent management
-│   │   └── model_fallback.py  # Model fallback logic
-│   └── utils/                 # Utility functions
-│       ├── validators.py      # Input validation
-│       └── pdf_extractor.py   # PDF processing
