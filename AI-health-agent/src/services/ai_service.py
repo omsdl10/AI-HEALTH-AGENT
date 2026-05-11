@@ -1,6 +1,6 @@
 import streamlit as st
-from agents.analysis_agent import AnalysisAgent
-# from agents.chat_agent import ChatAgent
+from agent.analysis_agent import AnalysisAgent
+# from agent.chat_agent import ChatAgent
 
 
 def init_analysis_state():
@@ -10,10 +10,10 @@ def init_analysis_state():
 
     if "chat_agent" not in st.session_state:
         try:
-            from agents.chat_agent import ChatAgent
+            from agent.chat_agent import ChatAgent
 
             # Check if GROQ_API_KEY exists before initializing
-            if "GROQ_API_KEY" not in st.secrets:
+            if not st.secrets.get("GROQ_API_KEY", ""):
                 st.session_state.chat_agent = None
                 st.session_state.chat_agent_error = "GROQ_API_KEY not found in secrets. Please add it to .streamlit/secrets.toml"
             else:

@@ -1,5 +1,5 @@
-APP_NAME = "AI Health agent"
-APP_DESCRIPTION = "Your Personal Health Insights Agent"
+APP_NAME = "AI Health Agent"
+APP_DESCRIPTION = "Your Personal AI Health Agent"
 APP_ICON = "🩺"
 APP_TAGLINE = "Discover a Healthier You with AI"
 

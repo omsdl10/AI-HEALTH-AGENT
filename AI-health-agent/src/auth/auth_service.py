@@ -1,151 +1,158 @@
-import streamlit as st
-from supabase import create_client
-from datetime import datetime
-import time
+import hashlib
 import re
+import secrets
+import sqlite3
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+import streamlit as st
 
 
 class AuthService:
     def __init__(self):
-        try:
-            # Initialize Supabase client directly
-            # This ensures a fresh client for each session, preventing state leakage
-            self.supabase = create_client(
-                st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
-            )
-        except Exception as e:
-            st.error(f"Failed to initialize services: {str(e)}")
-            raise e
+        self.db_path = self._get_db_path()
+        self._init_db()
 
-        # Try to restore session from Supabase if no current session
-        self.try_restore_session()
-
-        # Validate session on initialization
         if "auth_token" in st.session_state:
-            if not self.validate_session_token():
-                # Don't sign out immediately on failure during init to avoid loop
-                pass
+            self.validate_session_token()
+
+    def _get_db_path(self):
+        project_root = Path(__file__).resolve().parents[2]
+        db_dir = project_root / "data"
+        db_dir.mkdir(exist_ok=True)
+        return db_dir / "health_agent.sqlite3"
+
+    def _connect(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
+    def _init_db(self):
+        with self._connect() as conn:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    name TEXT,
+                    password_hash TEXT NOT NULL,
+                    password_salt TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    title TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    content TEXT,
+                    role TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id
+                    ON chat_sessions(user_id);
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id
+                    ON chat_messages(session_id);
+                """
+            )
+
+    def _row_to_dict(self, row):
+        return dict(row) if row else None
+
+    def _public_user(self, row):
+        user = self._row_to_dict(row)
+        if not user:
+            return None
+        user.pop("password_hash", None)
+        user.pop("password_salt", None)
+        return user
+
+    def _hash_password(self, password, salt=None):
+        salt = salt or secrets.token_hex(16)
+        password_hash = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000
+        ).hex()
+        return salt, password_hash
 
     def try_restore_session(self):
-        """Try to restore session from Supabase stored session."""
-        try:
-            # First try to restore from Streamlit session state tokens
-            if "auth_token" in st.session_state and "refresh_token" in st.session_state:
-                try:
-                    self.supabase.auth.set_session(
-                        st.session_state.auth_token, st.session_state.refresh_token
-                    )
-                except Exception as e:
-                    # print(f"Set session failed: {e}")
-                    pass
-
-            # Check if Supabase has a stored session
-            session = self.supabase.auth.get_session()
-            if session and session.access_token:
-                # If we have a session but it's not in state, restore it
-                # Or if the token in state is stale/different, update it
-                current_token = st.session_state.get("auth_token")
-                if not current_token or current_token != session.access_token:
-                    user = self.supabase.auth.get_user()
-                    if user and user.user:
-                        user_data = self.get_user_data(user.user.id)
-                        if user_data:
-                            st.session_state.auth_token = session.access_token
-                            st.session_state.refresh_token = session.refresh_token
-                            st.session_state.user = user_data
-        except Exception:
-            # If restoration fails, continue without session
-            pass
+        return None
 
     def validate_email(self, email):
-        """Validate email format."""
         pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
         return bool(re.match(pattern, email))
 
     def check_existing_user(self, email):
-        """Check if user already exists."""
-        try:
-            result = (
-                self.supabase.table("users").select("id").eq("email", email).execute()
-            )
-            return len(result.data) > 0
-        except Exception:
-            return False
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM users WHERE lower(email) = lower(?)",
+                (email,),
+            ).fetchone()
+        return row is not None
 
     def sign_up(self, email, password, name):
         try:
-            auth_response = self.supabase.auth.sign_up(
-                {
-                    "email": email,
-                    "password": password,
-                    "options": {"data": {"name": name}},
-                }
-            )
-
-            if not auth_response.user:
-                return False, "Failed to create user account"
-
-            user_data = {
-                "id": auth_response.user.id,
-                "email": email,
-                "name": name,
-                "created_at": datetime.now().isoformat(),
-            }
-
-            # Insert user data into users table
-            self.supabase.table("users").insert(user_data).execute()
-
-            # If we got a session immediately (email confirmation off), store it
-            if auth_response.session:
-                st.session_state.auth_token = auth_response.session.access_token
-                st.session_state.refresh_token = auth_response.session.refresh_token
-                st.session_state.user = user_data
-
-            return True, user_data
-
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "duplicate" in error_msg or "already registered" in error_msg:
+            if self.check_existing_user(email):
                 return False, "Email already registered"
+
+            user_id = str(uuid.uuid4())
+            created_at = datetime.now().isoformat()
+            salt, password_hash = self._hash_password(password)
+
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO users (id, email, name, password_hash, password_salt, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, email.strip().lower(), name, password_hash, salt, created_at),
+                )
+                user = conn.execute(
+                    "SELECT id, email, name, created_at FROM users WHERE id = ?",
+                    (user_id,),
+                ).fetchone()
+
+            user_data = self._public_user(user)
+            st.session_state.auth_token = secrets.token_urlsafe(32)
+            st.session_state.user = user_data
+            return True, user_data
+        except sqlite3.IntegrityError:
+            return False, "Email already registered"
+        except Exception as e:
             return False, f"Sign up failed: {str(e)}"
 
     def sign_in(self, email, password):
         try:
-            # Clear any existing session data first
-            # But don't call sign_out() which destroys auth_service in session_state
-            # Just clear the supabase client session locally
-            try:
-                self.supabase.auth.sign_out()
-            except Exception:
-                pass
+            with self._connect() as conn:
+                user = conn.execute(
+                    "SELECT * FROM users WHERE lower(email) = lower(?)",
+                    (email.strip(),),
+                ).fetchone()
 
-            auth_response = self.supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
+            if not user:
+                return False, "Invalid email or password"
 
-            if auth_response and auth_response.user:
-                # Get user data
-                user_data = self.get_user_data(auth_response.user.id)
-                if not user_data:
-                    return False, "User data not found"
+            _, password_hash = self._hash_password(password, user["password_salt"])
+            if not secrets.compare_digest(password_hash, user["password_hash"]):
+                return False, "Invalid email or password"
 
-                # Store session info
-                st.session_state.auth_token = auth_response.session.access_token
-                st.session_state.refresh_token = auth_response.session.refresh_token
-                st.session_state.user = user_data
-                return True, user_data
-
-            return False, "Invalid login response"
+            user_data = self._public_user(user)
+            st.session_state.auth_token = secrets.token_urlsafe(32)
+            st.session_state.user = user_data
+            return True, user_data
         except Exception as e:
             return False, str(e)
 
     def sign_out(self):
-        """Sign out and clear all session data."""
-        try:
-            self.supabase.auth.sign_out()
-        except Exception:
-            pass
-
         try:
             from auth.session_manager import SessionManager
 
@@ -155,125 +162,107 @@ class AuthService:
             return False, str(e)
 
     def get_user(self):
-        try:
-            return self.supabase.auth.get_user()
-        except Exception:
-            return None
+        return st.session_state.get("user")
 
     def create_session(self, user_id, title=None):
         try:
             current_time = datetime.now()
             default_title = f"{current_time.strftime('%d-%m-%Y')} | {current_time.strftime('%H:%M:%S')}"
+            session_id = str(uuid.uuid4())
+            created_at = current_time.isoformat()
 
-            session_data = {
-                "user_id": user_id,
-                "title": title or default_title,
-                "created_at": current_time.isoformat(),
-            }
-            result = self.supabase.table("chat_sessions").insert(session_data).execute()
-            return True, result.data[0] if result.data else None
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO chat_sessions (id, user_id, title, created_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (session_id, user_id, title or default_title, created_at),
+                )
+                session = conn.execute(
+                    "SELECT * FROM chat_sessions WHERE id = ?",
+                    (session_id,),
+                ).fetchone()
+
+            return True, self._row_to_dict(session)
         except Exception as e:
             return False, str(e)
 
     def get_user_sessions(self, user_id):
         try:
-            result = (
-                self.supabase.table("chat_sessions")
-                .select("*")
-                .eq("user_id", user_id)
-                .order("created_at", desc=True)
-                .execute()
-            )
-            return True, result.data
+            with self._connect() as conn:
+                sessions = conn.execute(
+                    """
+                    SELECT * FROM chat_sessions
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    """,
+                    (user_id,),
+                ).fetchall()
+            return True, [self._row_to_dict(session) for session in sessions]
         except Exception as e:
             st.error(f"Error fetching sessions: {str(e)}")
             return False, []
 
     def save_chat_message(self, session_id, content, role="user"):
         try:
-            message_data = {
-                "session_id": session_id,
-                "content": content,
-                "role": role,
-                "created_at": datetime.now().isoformat(),
-            }
-            result = self.supabase.table("chat_messages").insert(message_data).execute()
-            return True, result.data[0] if result.data else None
+            message_id = str(uuid.uuid4())
+            created_at = datetime.now().isoformat()
+
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO chat_messages (id, session_id, content, role, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (message_id, session_id, content, role, created_at),
+                )
+                message = conn.execute(
+                    "SELECT * FROM chat_messages WHERE id = ?",
+                    (message_id,),
+                ).fetchone()
+
+            return True, self._row_to_dict(message)
         except Exception as e:
             return False, str(e)
 
     def get_session_messages(self, session_id):
         try:
-            result = (
-                self.supabase.table("chat_messages")
-                .select("*")
-                .eq("session_id", session_id)
-                .order("created_at")
-                .execute()
-            )
-            return True, result.data
+            with self._connect() as conn:
+                messages = conn.execute(
+                    """
+                    SELECT * FROM chat_messages
+                    WHERE session_id = ?
+                    ORDER BY created_at
+                    """,
+                    (session_id,),
+                ).fetchall()
+            return True, [self._row_to_dict(message) for message in messages]
         except Exception as e:
             return False, str(e)
 
     def delete_session(self, session_id):
         try:
-            self.supabase.table("chat_messages").delete().eq(
-                "session_id", session_id
-            ).execute()
-
-            self.supabase.table("chat_sessions").delete().eq("id", session_id).execute()
-
+            with self._connect() as conn:
+                conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
             return True, None
         except Exception as e:
             st.error(f"Failed to delete session: {str(e)}")
             return False, str(e)
 
     def validate_session_token(self):
-        """Validate existing session token on startup."""
-        try:
-            session = self.supabase.auth.get_session()
-            if not session or not session.access_token:
-                # If no session in Supabase client, but we have tokens in state, try to set session again
-                if (
-                    "auth_token" in st.session_state
-                    and "refresh_token" in st.session_state
-                ):
-                    try:
-                        self.supabase.auth.set_session(
-                            st.session_state.auth_token, st.session_state.refresh_token
-                        )
-                        session = self.supabase.auth.get_session()
-                    except Exception:
-                        pass
-
-            if not session or not session.access_token:
-                return None
-
-            # Relaxed validation: If we have a valid Supabase session, update our state instead of failing
-            # This handles token refreshes or slight mismatches
-            if session.access_token != st.session_state.get("auth_token"):
-                st.session_state.auth_token = session.access_token
-                if session.refresh_token:
-                    st.session_state.refresh_token = session.refresh_token
-
-            user = self.supabase.auth.get_user()
-            if not user or not user.user:
-                return None
-
-            return self.get_user_data(user.user.id)
-        except Exception:
+        user_id = st.session_state.get("user", {}).get("id")
+        if not user_id:
             return None
+        return self.get_user_data(user_id)
 
     def get_user_data(self, user_id):
-        """Get user data from database."""
         try:
-            response = (
-                self.supabase.table("users")
-                .select("*")
-                .eq("id", user_id)
-                .single()
-                .execute()
-            )
-            return response.data if response else None
+            with self._connect() as conn:
+                user = conn.execute(
+                    "SELECT id, email, name, created_at FROM users WHERE id = ?",
+                    (user_id,),
+                ).fetchone()
+            return self._public_user(user)
         except Exception:
             return None

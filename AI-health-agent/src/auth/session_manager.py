@@ -43,8 +43,7 @@ class SessionManager:
             # Inject storage script to enable localStorage functionality
             SessionManager._inject_storage_script()
             
-            # The actual restoration happens in AuthService.try_restore_session()
-            # which uses Supabase's built-in session persistence
+            # Browser storage is kept for UI continuity between Streamlit reruns.
             
         except Exception:
             pass  # Ignore errors during restoration

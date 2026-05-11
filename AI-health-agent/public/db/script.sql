@@ -1,33 +1,31 @@
--- Create users table
+-- Local SQLite schema. The app creates these tables automatically in
+-- data/health_agent.sqlite3, so this file is only a reference.
+
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email TEXT NOT NULL,
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
     name TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create chat_sessions table
 CREATE TABLE chat_sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
     title TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Create chat_messages table
 CREATE TABLE chat_messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL,
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
     content TEXT,
     role TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
 );
 
--- Add indexes to improve query performance
 CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
 CREATE INDEX idx_chat_messages_session_id ON chat_messages(session_id);
-
--- Add unique constraint to prevent duplicate emails
-ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE (email);

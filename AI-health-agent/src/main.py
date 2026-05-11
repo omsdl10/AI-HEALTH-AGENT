@@ -9,7 +9,7 @@ from services.ai_service import get_chat_response
 
 # Must be the first Streamlit command
 st.set_page_config(
-    page_title="HIA - Health Insights Agent", page_icon="🩺", layout="wide"
+    page_title="AI Health Agent", page_icon="🩺", layout="wide"
 )
 
 # Initialize session state

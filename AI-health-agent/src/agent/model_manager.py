@@ -21,25 +21,25 @@ class ModelManager:
     MODEL_CONFIG = {
         ModelTier.PRIMARY: {
             "provider": "groq",
-            "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "model": "llama-3.3-70b-versatile",
             "max_tokens": 2000,
             "temperature": 0.7
         },
         ModelTier.SECONDARY: {
             "provider": "groq", 
-            "model": "llama-3.3-70b-versatile",
+            "model": "llama-3.1-8b-instant",
             "max_tokens": 2000,
             "temperature": 0.7
         },
         ModelTier.TERTIARY: {
             "provider": "groq",
-            "model": "llama-3.1-8b-instant",
+            "model": "openai/gpt-oss-120b",
             "max_tokens": 2000, 
             "temperature": 0.7
         },
         ModelTier.FALLBACK: {
             "provider": "groq",
-            "model": "llama3-70b-8192",
+            "model": "llama-3.3-70b-versatile",
             "max_tokens": 2000,
             "temperature": 0.7
         }
@@ -52,36 +52,59 @@ class ModelManager:
     def _initialize_clients(self):
         """Initialize API clients for each provider."""
         try:
-            self.clients["groq"] = groq.Groq(api_key=st.secrets["GROQ_API_KEY"])
+            api_key = st.secrets.get("GROQ_API_KEY", "")
+            if not api_key:
+                self.clients["groq_error"] = (
+                    "GROQ_API_KEY is missing. Add it to .streamlit/secrets.toml, "
+                    "then restart the app."
+                )
+                return
+            self.clients["groq"] = groq.Groq(api_key=api_key)
         except Exception as e:
-            logger.error(f"Failed to initialize Groq client: {str(e)}")
+            self.clients["groq_error"] = (
+                "Could not initialize Groq. Check .streamlit/secrets.toml and "
+                f"restart the app. Details: {str(e)}"
+            )
+            logger.error(self.clients["groq_error"])
 
     def generate_analysis(self, data, system_prompt, retry_count=0):
         """
         Generate analysis using the best available model with automatic fallback.
         Implements agent-based decision making for model selection.
         """
-        if retry_count > 3:
-            return {"success": False, "error": "All models failed after multiple retries"}
+        if "groq" not in self.clients:
+            return {
+                "success": False,
+                "error": self.clients.get(
+                    "groq_error",
+                    "Groq is not configured. Add GROQ_API_KEY to .streamlit/secrets.toml.",
+                ),
+            }
 
-        # Determine which model tier to use based on retry count
-        if retry_count == 0:
-            tier = ModelTier.PRIMARY
-        elif retry_count == 1:
-            tier = ModelTier.SECONDARY
-        elif retry_count == 2:
-            tier = ModelTier.TERTIARY
-        else:
-            tier = ModelTier.FALLBACK
-            
+        failures = []
+        tiers = [
+            ModelTier.PRIMARY,
+            ModelTier.SECONDARY,
+            ModelTier.TERTIARY,
+            ModelTier.FALLBACK,
+        ]
+
+        for tier in tiers:
+            result = self._try_model(data, system_prompt, tier)
+            if result["success"]:
+                return result
+            failures.append(result["error"])
+
+        return {
+            "success": False,
+            "error": "Analysis failed. " + " | ".join(failures[-3:]),
+        }
+
+    def _try_model(self, data, system_prompt, tier):
+        """Try one configured model and return its result without recursive retries."""
         model_config = self.MODEL_CONFIG[tier]
         provider = model_config["provider"]
         model = model_config["model"]
-        
-        # Check if we have a client for this provider
-        if provider not in self.clients:
-            logger.error(f"No client available for provider: {provider}")
-            return self.generate_analysis(data, system_prompt, retry_count + 1)
             
         try:
             client = self.clients[provider]
@@ -105,15 +128,17 @@ class ModelManager:
                 }
                 
         except Exception as e:
-            error_message = str(e).lower()
+            error_message = str(e)
             logger.warning(f"Model {model} failed: {error_message}")
             
             # Check for rate limit errors
-            if "rate limit" in error_message or "quota" in error_message:
+            if "rate limit" in error_message.lower() or "quota" in error_message.lower():
                 # Wait briefly before retrying with a different model
                 time.sleep(2)
             
-            # Try next model in hierarchy
-            return self.generate_analysis(data, system_prompt, retry_count + 1)
+            return {
+                "success": False,
+                "error": f"{model}: {error_message[:180]}",
+            }
             
-        return {"success": False, "error": "Analysis failed with all available models"}
+        return {"success": False, "error": f"{model}: no response returned"}
