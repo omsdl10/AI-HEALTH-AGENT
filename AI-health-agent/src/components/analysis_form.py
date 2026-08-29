@@ -111,6 +111,7 @@ def handle_form_submission(patient_name, age, gender, pdf_contents):
                 "age": age,
                 "gender": gender,
                 "report": pdf_contents,
+                "session_id": st.session_state.current_session["id"],
             },
             SPECIALIST_PROMPTS["comprehensive_analyst"],
         )
@@ -128,6 +129,12 @@ def handle_form_submission(patient_name, age, gender, pdf_contents):
             if "model_used" in result:
                 model_info = f"\n\n*Analysis generated using {result['model_used']}*"
                 content += model_info
+            if "rag_eval" in result:
+                eval_info = (
+                    f"\n\n*RAG eval: {result['rag_eval']['score']}% "
+                    f"({result['rag_eval']['verdict']})*"
+                )
+                content += eval_info
 
             st.session_state.auth_service.save_chat_message(
                 st.session_state.current_session["id"], content, role="assistant"

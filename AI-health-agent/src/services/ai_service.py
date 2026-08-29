@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from agent.analysis_agent import AnalysisAgent
 # from agent.chat_agent import ChatAgent
 
@@ -13,9 +14,12 @@ def init_analysis_state():
             from agent.chat_agent import ChatAgent
 
             # Check if GROQ_API_KEY exists before initializing
-            if not st.secrets.get("GROQ_API_KEY", ""):
+            api_key = os.environ.get("GROQ_API_KEY", "") or st.secrets.get(
+                "GROQ_API_KEY", ""
+            )
+            if not api_key:
                 st.session_state.chat_agent = None
-                st.session_state.chat_agent_error = "GROQ_API_KEY not found in secrets. Please add it to .streamlit/secrets.toml"
+                st.session_state.chat_agent_error = "GROQ_API_KEY not found. Please add it to your app secrets."
             else:
                 st.session_state.chat_agent = ChatAgent()
                 st.session_state.chat_agent_error = None
@@ -54,6 +58,9 @@ def generate_analysis(data, system_prompt, check_only=False, session_id=None):
         return st.session_state.analysis_agent.check_rate_limit()
 
     # Call analyze_report without the chat_history parameter
+    if isinstance(data, dict) and session_id and not data.get("session_id"):
+        data["session_id"] = session_id
+
     return st.session_state.analysis_agent.analyze_report(
         data=data, system_prompt=system_prompt, check_only=False
     )
@@ -67,7 +74,7 @@ def get_chat_response(query, context_text, chat_history):
     if st.session_state.chat_agent is None:
         error_msg = st.session_state.get(
             "chat_agent_error",
-            "Chat functionality is currently unavailable. Please check your GROQ_API_KEY configuration in .streamlit/secrets.toml",
+            "Chat functionality is currently unavailable. Please check your GROQ_API_KEY app secret.",
         )
         return f"Error: {error_msg}"
 
@@ -105,15 +112,23 @@ def get_chat_response(query, context_text, chat_history):
         # Create a dummy vector store with minimal content to avoid errors
         context_text = "No report context available. Relying on chat history only."
 
+    session_id = None
+    if st.session_state.get("current_session"):
+        session_id = st.session_state.current_session.get("id")
+
+    report_key = st.session_state.chat_agent.rag_service.get_report_key(context_text)
+    cache_key = f"{session_id or 'default'}:{report_key}"
+
     if "vector_store" not in st.session_state or st.session_state.get(
         "vector_store_key"
-    ) != len(context_text):
+    ) != cache_key:
         try:
             with st.spinner("Processing context..."):
                 st.session_state.vector_store = (
-                    st.session_state.chat_agent.initialize_vector_store(context_text)
+                    st.session_state.chat_agent.initialize_vector_store(
+                        context_text, session_id=session_id
+                    )
                 )
-                st.session_state.vector_store_key = len(context_text)
         except Exception as e:
             # If vector store creation fails, create a minimal one
             st.warning(
@@ -122,10 +137,9 @@ def get_chat_response(query, context_text, chat_history):
             try:
                 st.session_state.vector_store = (
                     st.session_state.chat_agent.initialize_vector_store(
-                        "No report context available."
+                        "No report context available.", session_id=session_id
                     )
                 )
-                st.session_state.vector_store_key = 0
             except Exception:
                 # Last resort - return error
                 return f"Error: Could not initialize vector store. {str(e)}"

@@ -1,33 +1,22 @@
 import streamlit as st
 from groq import Groq
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 import os
+
+from services.rag_service import RAGService
+from services.rag_eval_service import RAGEvalService
 
 
 class ChatAgent:
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=200
-        )
-        self.client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        self.rag_service = RAGService()
+        self.rag_eval_service = RAGEvalService()
+        api_key = os.environ.get("GROQ_API_KEY", "") or st.secrets["GROQ_API_KEY"]
+        self.client = Groq(api_key=api_key)
         self.model_name = "llama-3.3-70b-versatile"
 
-    def initialize_vector_store(self, text_content):
-        """Create vector store from text content."""
-        if not text_content or text_content.strip() == "":
-            # Create a minimal vector store with a placeholder
-            text_content = "No report context available."
-
-        texts = self.text_splitter.split_text(text_content)
-        if not texts:
-            # If splitting results in empty list, add at least one text
-            texts = [text_content]
-
-        vectorstore = FAISS.from_texts(texts, self.embeddings)
-        return vectorstore
+    def initialize_vector_store(self, text_content, session_id=None):
+        """Create or reuse a vector store from report content."""
+        return self.rag_service.get_or_create_vector_store(text_content, session_id)
 
     def _format_chat_history(self, chat_history):
         """Format chat history for Groq API."""
@@ -86,9 +75,9 @@ Standalone Question:"""
 
         # 2. Retrieve relevant documents
         try:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-            docs = retriever.get_relevant_documents(contextualized_query)
-            context = "\n\n".join([doc.page_content for doc in docs])
+            context = self.rag_service.retrieve_context(
+                vectorstore, contextualized_query, k=4
+            )
 
             # If context is just placeholder text, set to empty
             if context.strip() == "No report context available.":
@@ -135,6 +124,17 @@ Standalone Question:"""
                 temperature=0.7,
                 max_tokens=500,
             )
-            return response.choices[0].message.content
+            answer = response.choices[0].message.content
+            session_id = None
+            if st.session_state.get("current_session"):
+                session_id = st.session_state.current_session.get("id")
+            self.rag_eval_service.evaluate(
+                query=contextualized_query,
+                retrieved_context=context,
+                answer=answer,
+                mode="Follow-up chat",
+                session_id=session_id,
+            )
+            return answer
         except Exception as e:
             return f"Error generating response: {str(e)}"

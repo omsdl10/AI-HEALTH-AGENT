@@ -6,7 +6,7 @@ app_file: src/main.py
 
 # AI Health Agent
 
-AI Health Agent is a Streamlit application that helps users upload blood report PDFs, generate AI-assisted health insights, and ask follow-up questions about the report in a chat-style workflow.
+AI Health Agent is a RAG-based Streamlit application that helps users upload blood report PDFs, retrieve relevant report sections from a vector store, generate AI-assisted health insights, and ask follow-up questions about the report in a chat-style workflow.
 
 The app is designed for educational and wellness-oriented interpretation. It is not a medical device and does not replace advice from a qualified healthcare professional.
 
@@ -14,8 +14,9 @@ The app is designed for educational and wellness-oriented interpretation. It is 
 
 - PDF report upload with file validation and text extraction
 - Sample report mode for quick testing
-- AI-generated health analysis with risk signals and recommendations
-- Follow-up chat using report context
+- RAG-powered initial health analysis with retrieved report evidence
+- RAG-powered follow-up chat using the same report vector store
+- Built-in RAG evaluation for retrieval coverage, query-context match, and answer grounding
 - Local user accounts and session history
 - SQLite storage for users, chat sessions, and messages
 - Groq-powered LLM responses with model fallback handling
@@ -27,7 +28,32 @@ The app is designed for educational and wellness-oriented interpretation. It is 
 - Groq for LLM inference
 - SQLite for local app data
 - PDFPlumber for PDF text extraction
-- LangChain, FAISS, and Hugging Face embeddings for contextual follow-up chat
+- LangChain, FAISS, and Hugging Face embeddings for the RAG pipeline
+
+## RAG Flow
+
+```text
+PDF report
+  -> text extraction
+  -> chunking
+  -> Hugging Face embeddings
+  -> FAISS vector store
+  -> retrieval for initial analysis and follow-up chat
+  -> Groq LLM response
+```
+
+The initial analysis retrieves report sections across medical categories such as CBC, metabolic markers, kidney function, liver function, lipid profile, inflammation, thyroid, and nutritional deficiencies. The LLM is instructed to use retrieved report context as evidence and avoid guessing when a marker is unavailable.
+
+## RAG Evaluation
+
+Each initial analysis and follow-up answer is scored locally with lightweight RAG evaluation metrics:
+
+- Retrieval coverage: whether the retriever returned usable context
+- Query match: how strongly the retrieved context overlaps with the analysis query or user question
+- Answer grounding: how much of the answer is supported by retrieved context tokens
+- Answer relevance: how closely the answer overlaps with the query
+
+The app shows an aggregate RAG Evaluation panel inside each session and appends a compact score to generated analyses.
 
 ## Project Structure
 

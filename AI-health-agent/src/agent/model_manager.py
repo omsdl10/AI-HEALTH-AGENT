@@ -2,6 +2,7 @@ import groq
 import streamlit as st
 from enum import Enum
 import logging
+import os
 import time
 
 logger = logging.getLogger(__name__)
@@ -52,11 +53,13 @@ class ModelManager:
     def _initialize_clients(self):
         """Initialize API clients for each provider."""
         try:
-            api_key = st.secrets.get("GROQ_API_KEY", "")
+            api_key = os.environ.get("GROQ_API_KEY", "")
+            if not api_key:
+                api_key = st.secrets.get("GROQ_API_KEY", "")
             if not api_key:
                 self.clients["groq_error"] = (
-                    "GROQ_API_KEY is missing. Add it to .streamlit/secrets.toml, "
-                    "then restart the app."
+                    "GROQ_API_KEY is missing. Add it to your app secrets, then "
+                    "restart the app."
                 )
                 return
             self.clients["groq"] = groq.Groq(api_key=api_key)
@@ -77,7 +80,7 @@ class ModelManager:
                 "success": False,
                 "error": self.clients.get(
                     "groq_error",
-                    "Groq is not configured. Add GROQ_API_KEY to .streamlit/secrets.toml.",
+                    "Groq is not configured. Add GROQ_API_KEY to your app secrets.",
                 ),
             }
 

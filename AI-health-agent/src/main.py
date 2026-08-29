@@ -5,6 +5,7 @@ from components.sidebar import show_sidebar
 from components.analysis_form import show_analysis_form
 from components.footer import show_footer
 from config.app_config import APP_NAME, APP_TAGLINE, APP_DESCRIPTION, APP_ICON
+from services.rag_eval_service import RAGEvalService
 from services.ai_service import get_chat_response
 
 # Must be the first Streamlit command
@@ -71,6 +72,28 @@ def show_chat_history():
                 st.success(msg["content"])
         return messages
     return []
+
+
+def show_rag_eval_dashboard():
+    current_session = st.session_state.get("current_session")
+    session_id = current_session.get("id") if isinstance(current_session, dict) else None
+    summary = RAGEvalService().summarize(session_id)
+
+    if not summary:
+        return
+
+    with st.expander("RAG Evaluation", expanded=False):
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Overall", f"{summary['avg_score']}%")
+        col2.metric("Grounding", f"{summary['avg_grounding']}%")
+        col3.metric("Query Match", f"{summary['avg_query_context_overlap']}%")
+        col4.metric("Runs", summary["count"])
+
+        latest = summary["latest"]
+        st.caption(
+            f"Latest: {latest['mode']} | {latest['verdict']} | "
+            f"Retrieved context: {latest['context_chars']} chars"
+        )
 
 
 def handle_chat_input(messages):
@@ -152,6 +175,7 @@ def main():
     if st.session_state.get("current_session"):
         st.title(f"📊 {st.session_state.current_session['title']}")
         messages = show_chat_history()
+        show_rag_eval_dashboard()
 
         # If we have messages (meaning analysis is done), show chat input
         # Otherwise show analysis form

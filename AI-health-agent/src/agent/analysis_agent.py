@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import streamlit as st
 from agent.model_manager import ModelManager
+from services.rag_eval_service import RAGEvalService
+from services.rag_service import RAGService
 
 class AnalysisAgent:
     """
@@ -10,6 +12,8 @@ class AnalysisAgent:
     
     def __init__(self):
         self.model_manager = ModelManager()
+        self.rag_service = RAGService()
+        self.rag_eval_service = RAGEvalService()
         self._init_state()
         
     def _init_state(self):
@@ -61,16 +65,43 @@ class AnalysisAgent:
         if check_only:
             return can_analyze, error_msg
         
-        # Process data before sending to model
+        # Process data before retrieval and generation
         processed_data = self._preprocess_data(data)
+        report_text = processed_data.get("report", "") if isinstance(processed_data, dict) else ""
+        session_id = processed_data.get("session_id") if isinstance(processed_data, dict) else None
+
+        vector_store = self.rag_service.get_or_create_vector_store(
+            report_text, session_id=session_id
+        )
+        retrieved_context = self.rag_service.retrieve_analysis_context(vector_store)
         
         # Enhance prompt with in-context learning (only if chat_history is provided)
         enhanced_prompt = self._build_enhanced_prompt(system_prompt, processed_data, chat_history) if chat_history else system_prompt
+        enhanced_prompt += (
+            "\n\nUse only the retrieved report context supplied by the RAG pipeline "
+            "as medical evidence. If a marker or value is not present in the "
+            "retrieved context, say it is not available instead of guessing."
+        )
+
+        rag_payload = {
+            "patient_name": processed_data.get("patient_name", ""),
+            "age": processed_data.get("age", ""),
+            "gender": processed_data.get("gender", ""),
+            "retrieved_report_context": retrieved_context or "No relevant report context retrieved.",
+        }
         
         # Generate analysis using model manager
-        result = self.model_manager.generate_analysis(processed_data, enhanced_prompt)
+        result = self.model_manager.generate_analysis(rag_payload, enhanced_prompt)
         
         if result["success"]:
+            eval_query = " ".join(self.rag_service.ANALYSIS_QUERIES)
+            result["rag_eval"] = self.rag_eval_service.evaluate(
+                query=eval_query,
+                retrieved_context=retrieved_context,
+                answer=result["content"],
+                mode="Initial analysis",
+                session_id=session_id,
+            )
             # Update analytics and learning systems
             self._update_analytics(result)
             self._update_knowledge_base(processed_data, result["content"])
@@ -215,7 +246,8 @@ class AnalysisAgent:
                 "patient_name": data.get("patient_name", ""),
                 "age": data.get("age", ""),
                 "gender": data.get("gender", ""),
-                "report": data.get("report", "")
+                "report": data.get("report", ""),
+                "session_id": data.get("session_id", ""),
             }
             return processed
         return data
